@@ -16,35 +16,23 @@
 # TODO Future:
 #   Multiple LBs ?
 
-module "enable_logging" {
-  source  = "devops-workflow/boolean/local"
-  version = "0.1.1"
-  value   = "${var.enable_logging}"
-}
-
-module "enabled" {
-  source  = "devops-workflow/boolean/local"
-  version = "0.1.1"
-  value   = "${var.enabled}"
-}
-
 module "label" {
   source        = "devops-workflow/label/local"
   version       = "0.2.1"
-  attributes    = "${var.attributes}"
-  component     = "${var.component}"
-  delimiter     = "${var.delimiter}"
-  environment   = "${var.environment}"
-  monitor       = "${var.monitor}"
-  name          = "${var.name}"
-  namespace-env = "${var.namespace-env}"
-  namespace-org = "${var.namespace-org}"
-  organization  = "${var.organization}"
-  owner         = "${var.owner}"
-  product       = "${var.product}"
-  service       = "${var.service}"
-  tags          = "${var.tags}"
-  team          = "${var.team}"
+  attributes    = var.attributes
+  component     = var.component
+  delimiter     = var.delimiter
+  environment   = var.environment
+  monitor       = var.monitor
+  name          = var.name
+  namespace-env = var.namespace-env
+  namespace-org = var.namespace-org
+  organization  = var.organization
+  owner         = var.owner
+  product       = var.product
+  service       = var.service
+  tags          = var.tags
+  team          = var.team
 }
 
 # TODO: need to support from var both basename and a complete name
@@ -52,20 +40,20 @@ module "label" {
 module "log_bucket" {
   source        = "devops-workflow/label/local"
   version       = "0.2.1"
-  attributes    = "${var.attributes}"
-  component     = "${var.component}"
-  delimiter     = "${var.delimiter}"
-  environment   = "${var.environment}"
-  monitor       = "${var.monitor}"
-  name          = "${var.log_bucket_name}"
+  attributes    = var.attributes
+  component     = var.component
+  delimiter     = var.delimiter
+  environment   = var.environment
+  monitor       = var.monitor
+  name          = var.log_bucket_name
   namespace-env = true
   namespace-org = true
-  organization  = "${var.organization}"
-  owner         = "${var.owner}"
-  product       = "${var.product}"
-  service       = "${var.service}"
-  tags          = "${var.tags}"
-  team          = "${var.team}"
+  organization  = var.organization
+  owner         = var.owner
+  product       = var.product
+  service       = var.service
+  tags          = var.tags
+  team          = var.team
 }
 
 /*
@@ -77,45 +65,40 @@ elif SSL -> "*.${var.env}.${var.domain}"
 else count = 0
 */
 locals {
-  cert_name = "*.${module.label.environment}.${module.label.organization}.com"
+  cert_name = format("*.%s.%s.com", module.label.environment, module.label.organization)
 }
 
 data "aws_acm_certificate" "this" {
-  count = "${
-    module.enabled.value &&
+  count = (var.enabled &&
     var.type == "application" &&
-    contains(var.lb_protocols, "HTTPS")
-    ? 1 : 0}"
+  contains(var.lb_protocols, "HTTPS")) ? 1 : 0
 
-  domain = "${var.certificate_name != "" ? var.certificate_name : local.cert_name }"
+  domain = var.certificate_name != "" ? var.certificate_name : local.cert_name
 
   #statuses = ["ISSUED"]
 }
 
 data "aws_acm_certificate" "additional" {
-  count = "${
-    module.enabled.value &&
+  count = (var.enabled &&
     var.type == "application" &&
-    contains(var.lb_protocols, "HTTPS")
-    ? length(var.certificate_additional_names) : 0
-  }"
+  contains(var.lb_protocols, "HTTPS")) ? length(var.certificate_additional_names) : 0
 
-  domain = "${var.certificate_additional_names[count.index]}"
+  domain = var.certificate_additional_names[count.index]
 }
 
 # May need to create 2: 1 w/ logs and 1 w/o logs
 resource "aws_lb" "application" {
-  count              = "${module.enabled.value && var.type == "application" ? 1 : 0}"
-  name               = "${module.label.id_32}"
-  internal           = "${var.internal}"
-  load_balancer_type = "${var.type}"
+  count              = (var.enabled && var.type == "application") ? 1 : 0
+  name               = module.label.id_32
+  internal           = var.internal
+  load_balancer_type = var.type
 
-  enable_deletion_protection = "${var.enable_deletion_protection}"
-  enable_http2               = "${var.enable_http2}"
-  idle_timeout               = "${var.idle_timeout}"
-  security_groups            = ["${var.security_groups}"]
-  subnets                    = ["${var.subnets}"]
-  tags                       = "${module.label.tags}"
+  enable_deletion_protection = var.enable_deletion_protection
+  enable_http2               = var.enable_http2
+  idle_timeout               = var.idle_timeout
+  security_groups            = [var.security_groups]
+  subnets                    = [var.subnets]
+  tags                       = module.label.tags
 
   #ip_address_type     = "${}"
 
@@ -134,20 +117,20 @@ resource "aws_lb" "application" {
   #    delete  =
   #    update  =
   #  }
-  depends_on = ["aws_s3_bucket.log_bucket"]
+  depends_on = [aws_s3_bucket.log_bucket]
 }
 
 resource "aws_lb" "network" {
-  count              = "${module.enabled.value && var.type == "network" ? 1 : 0}"
-  name               = "${module.label.id_32}"
-  internal           = "${var.internal}"
-  load_balancer_type = "${var.type}"
+  count              = (var.enabled && var.type == "network") ? 1 : 0
+  name               = module.label.id_32
+  internal           = var.internal
+  load_balancer_type = var.type
 
-  enable_cross_zone_load_balancing = "${var.enable_cross_zone_load_balancing}"
-  enable_deletion_protection       = "${var.enable_deletion_protection}"
-  idle_timeout                     = "${var.idle_timeout}"
-  subnets                          = ["${var.subnets}"]
-  tags                             = "${module.label.tags}"
+  enable_cross_zone_load_balancing = var.enable_cross_zone_load_balancing
+  enable_deletion_protection       = var.enable_deletion_protection
+  idle_timeout                     = var.idle_timeout
+  subnets                          = [var.subnets]
+  tags                             = module.label.tags
 
   #ip_address_type     = "${}"
 
@@ -167,11 +150,10 @@ resource "aws_lb" "network" {
 }
 
 data "aws_iam_policy_document" "bucket_policy" {
-  count = "${
-    module.enabled.value &&
-    module.enable_logging.value &&
+  count = (var.enabled &&
+    var.enable_logging &&
     var.type == "application" &&
-    var.create_log_bucket ? 1 : 0}"
+  var.create_log_bucket) ? 1 : 0
 
   statement {
     sid = "AllowToPutLoadBalancerLogsToS3Bucket"
@@ -192,18 +174,17 @@ data "aws_iam_policy_document" "bucket_policy" {
 }
 
 resource "aws_s3_bucket" "log_bucket" {
-  count = "${
-    module.enabled.value &&
-    module.enable_logging.value &&
+  count = (var.enabled &&
+    var.enable_logging &&
     var.type == "application" &&
-    var.create_log_bucket ? 1 : 0}"
+  var.create_log_bucket) ? 1 : 0
 
-  bucket = "${module.log_bucket.id}"
+  bucket = module.log_bucket.id
 
   #acl
-  policy        = "${var.bucket_policy == "" ? data.aws_iam_policy_document.bucket_policy.json : var.bucket_policy}"
-  force_destroy = "${var.force_destroy_log_bucket}"
-  tags          = "${merge(var.tags, map("Name", format("%s", var.log_bucket_name)))}"
+  policy        = var.bucket_policy == "" ? data.aws_iam_policy_document.bucket_policy.json : var.bucket_policy
+  force_destroy = var.force_destroy_log_bucket
+  tags          = merge(var.tags, map("Name", format("%s", var.log_bucket_name)))
 
   #tags            = "${module.label.tags}"
   lifecycle_rule {
@@ -220,12 +201,12 @@ resource "aws_s3_bucket" "log_bucket" {
 
 locals {
   // Set default to any port set that has not been specified
-  instance_http_ports  = "${length(compact(split(",", var.instance_http_ports))) > 0 ? var.instance_http_ports : var.ports}"
-  instance_https_ports = "${length(compact(split(",", var.instance_https_ports))) > 0 ? var.instance_https_ports : var.ports}"
-  instance_tcp_ports   = "${length(compact(split(",", var.instance_tcp_ports))) > 0 ? var.instance_tcp_ports : var.ports}"
-  lb_http_ports        = "${length(compact(split(",", var.lb_http_ports))) > 0 ? var.lb_http_ports : var.ports}"
-  lb_https_ports       = "${length(compact(split(",", var.lb_https_ports))) > 0 ? var.lb_https_ports : var.ports}"
-  lb_tcp_ports         = "${length(compact(split(",", var.lb_tcp_ports))) > 0 ? var.lb_tcp_ports : var.ports}"
+  instance_http_ports  = length(compact(split(",", var.instance_http_ports))) > 0 ? var.instance_http_ports : var.ports
+  instance_https_ports = length(compact(split(",", var.instance_https_ports))) > 0 ? var.instance_https_ports : var.ports
+  instance_tcp_ports   = length(compact(split(",", var.instance_tcp_ports))) > 0 ? var.instance_tcp_ports : var.ports
+  lb_http_ports        = length(compact(split(",", var.lb_http_ports))) > 0 ? var.lb_http_ports : var.ports
+  lb_https_ports       = length(compact(split(",", var.lb_https_ports))) > 0 ? var.lb_https_ports : var.ports
+  lb_tcp_ports         = length(compact(split(",", var.lb_tcp_ports))) > 0 ? var.lb_tcp_ports : var.ports
 }
 
 /* Debugging
@@ -246,42 +227,39 @@ locals {
 */
 
 resource "aws_lb_target_group" "application-http" {
-  count = "${
-    module.enabled.value &&
+  count = (var.enabled &&
     var.type == "application" &&
-    contains(var.lb_protocols, "HTTP")
-    ? length(compact(split(",", local.instance_http_ports))) : 0}"
+  contains(var.lb_protocols, "HTTP")) ? length(compact(split(",", local.instance_http_ports))) : 0
 
-  name = "${join("-",
-    list(substr(module.label.id_org,0,26 <= length(module.label.id_org) ? 26 : length(module.label.id_org))),
-    list(element(compact(split(",",local.instance_http_ports)), count.index))
-    )}"
+  name = join("-",
+    list(substr(module.label.id_org, 0, 26 <= length(module.label.id_org) ? 26 : length(module.label.id_org))),
+  list(element(compact(split(",", local.instance_http_ports)), count.index)))
 
-  port        = "${element(compact(split(",",local.instance_http_ports)), count.index)}"
+  port        = element(compact(split(",", local.instance_http_ports)), count.index)
   protocol    = "HTTP"
-  target_type = "${var.target_type}"
-  vpc_id      = "${var.vpc_id}"
+  target_type = var.target_type
+  vpc_id      = var.vpc_id
 
   #deregistration_delay  = "${}"
   health_check {
-    interval            = "${var.health_check_interval}"
-    path                = "${var.health_check_path}"
-    port                = "${var.health_check_port}"
-    healthy_threshold   = "${var.health_check_healthy_threshold}"
-    unhealthy_threshold = "${var.health_check_unhealthy_threshold}"
-    timeout             = "${var.health_check_timeout}"
-    protocol            = "${var.health_check_protocol}"
-    matcher             = "${var.health_check_matcher}"
+    interval            = var.health_check_interval
+    path                = var.health_check_path
+    port                = var.health_check_port
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+    timeout             = var.health_check_timeout
+    protocol            = var.health_check_protocol
+    matcher             = var.health_check_matcher
   }
 
   # ALB only. Cannot be defined for network LB
   stickiness {
     type            = "lb_cookie"
-    cookie_duration = "${var.cookie_duration > 0 ? var.cookie_duration : 1}"
-    enabled         = "${var.cookie_duration > 0 ? true : false}"
+    cookie_duration = var.cookie_duration > 0 ? var.cookie_duration : 1
+    enabled         = var.cookie_duration > 0 ? true : false
   }
 
-  tags = "${module.label.tags}"
+  tags = module.label.tags
 
   lifecycle {
     create_before_destroy = true
@@ -289,42 +267,39 @@ resource "aws_lb_target_group" "application-http" {
 }
 
 resource "aws_lb_target_group" "application-https" {
-  count = "${
-    module.enabled.value &&
+  count = (var.enabled &&
     var.type == "application" &&
-    contains(var.lb_protocols, "HTTPS")
-    ? length(compact(split(",", local.instance_https_ports))) : 0}"
+  contains(var.lb_protocols, "HTTPS")) ? length(compact(split(",", local.instance_https_ports))) : 0
 
-  name = "${join("-",
-    list(substr(module.label.id_org,0,26 <= length(module.label.id_org) ? 26 : length(module.label.id_org))),
-    list(element(compact(split(",",local.instance_https_ports)), count.index))
-    )}"
+  name = join("-",
+    list(substr(module.label.id_org, 0, 26 <= length(module.label.id_org) ? 26 : length(module.label.id_org))),
+  list(element(compact(split(",", local.instance_https_ports)), count.index)))
 
-  port        = "${element(compact(split(",",local.instance_https_ports)), count.index)}"
+  port        = element(compact(split(",", local.instance_https_ports)), count.index)
   protocol    = "HTTP"
-  target_type = "${var.target_type}"
-  vpc_id      = "${var.vpc_id}"
+  target_type = var.target_type
+  vpc_id      = var.vpc_id
 
   #deregistration_delay  = "${}"
   health_check {
-    interval            = "${var.health_check_interval}"
-    path                = "${var.health_check_path}"
-    port                = "${var.health_check_port}"
-    healthy_threshold   = "${var.health_check_healthy_threshold}"
-    unhealthy_threshold = "${var.health_check_unhealthy_threshold}"
-    timeout             = "${var.health_check_timeout}"
-    protocol            = "${var.health_check_protocol}"
-    matcher             = "${var.health_check_matcher}"
+    interval            = var.health_check_interval
+    path                = var.health_check_path
+    port                = var.health_check_port
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+    timeout             = var.health_check_timeout
+    protocol            = var.health_check_protocol
+    matcher             = var.health_check_matcher
   }
 
   # ALB only. Cannot be defined for network LB
   stickiness {
     type            = "lb_cookie"
-    cookie_duration = "${var.cookie_duration > 0 ? var.cookie_duration : 1}"
-    enabled         = "${var.cookie_duration > 0 ? true : false}"
+    cookie_duration = (var.cookie_duration > 0) ? var.cookie_duration : 1
+    enabled         = (var.cookie_duration > 0) ? true : false
   }
 
-  tags = "${module.label.tags}"
+  tags = module.label.tags
 
   lifecycle {
     create_before_destroy = true
@@ -335,45 +310,42 @@ resource "aws_lb_target_group" "application-https" {
 locals {
   health_base = {
     interval            = "10"
-    port                = "${var.health_check_port}"
-    healthy_threshold   = "${var.health_check_healthy_threshold}"
-    unhealthy_threshold = "${var.health_check_unhealthy_threshold}"
-    protocol            = "${var.health_check_protocol}"
+    port                = var.health_check_port
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+    protocol            = var.health_check_protocol
   }
 
   http = {
-    path    = "${var.health_check_path}"
+    path    = var.health_check_path
     matcher = "200-399"
     timeout = "6"
   }
 
-  h_keys      = "${join(",", keys(local.health_base))}"
-  h_vals      = "${join(",", values(local.health_base))}"
-  http_keys   = "${join(",", keys(local.http))}"
-  http_vals   = "${join(",", values(local.http))}"
-  keys        = "${ var.health_check_protocol == "TCP" ? local.h_keys : "${local.h_keys},${local.http_keys}" }"
-  vals        = "${ var.health_check_protocol == "TCP" ? local.h_vals : "${local.h_vals},${local.http_vals}" }"
-  healthcheck = "${zipmap(split(",", local.keys), split(",", local.vals))}"
+  h_keys      = join(",", keys(local.health_base))
+  h_vals      = join(",", values(local.health_base))
+  http_keys   = join(",", keys(local.http))
+  http_vals   = join(",", values(local.http))
+  keys        = (var.health_check_protocol == "TCP") ? local.h_keys : merge(local.h_keys, local.http_keys)
+  vals        = (var.health_check_protocol == "TCP") ? local.h_vals : merge(local.h_vals, local.http_vals)
+  healthcheck = zipmap(split(",", local.keys), split(",", local.vals))
 }
 
 resource "aws_lb_target_group" "network" {
-  count = "${
-    module.enabled.value &&
-    var.type == "network"
-    ? length(compact(split(",", local.instance_tcp_ports))) : 0}"
+  count = (var.enabled &&
+  var.type == "network") ? length(compact(split(",", local.instance_tcp_ports))) : 0
 
-  name = "${join("-",
-    list(substr(module.label.id_org,0,26 <= length(module.label.id_org) ? 26 : length(module.label.id_org))),
-    list(element(compact(split(",",local.instance_tcp_ports)), count.index))
-    )}"
+  name = join("-",
+    list(substr(module.label.id_org, 0, 26 <= length(module.label.id_org) ? 26 : length(module.label.id_org))),
+  list(element(compact(split(",", local.instance_tcp_ports)), count.index)))
 
-  health_check = "${list(local.healthcheck)}"
-  port         = "${element(compact(split(",",local.instance_tcp_ports)), count.index)}"
+  health_check = list(local.healthcheck)
+  port         = element(compact(split(",", local.instance_tcp_ports)), count.index)
   protocol     = "TCP"
   stickiness   = []
-  tags         = "${module.label.tags}"
-  target_type  = "${var.target_type}"
-  vpc_id       = "${var.vpc_id}"
+  tags         = module.label.tags
+  target_type  = var.target_type
+  vpc_id       = var.vpc_id
 
   #deregistration_delay  = "${}"
   lifecycle {
@@ -382,37 +354,33 @@ resource "aws_lb_target_group" "network" {
 }
 
 resource "aws_lb_listener" "http" {
-  count = "${
-    module.enabled.value &&
+  count = (var.enabled &&
     var.type == "application" &&
-    contains(var.lb_protocols, "HTTP")
-    ? length(compact(split(",", local.lb_http_ports))) : 0}"
+  contains(var.lb_protocols, "HTTP")) ? length(compact(split(",", local.lb_http_ports))) : 0
 
-  load_balancer_arn = "${element(concat(aws_lb.application.*.arn, aws_lb.network.*.arn, list("")), 0)}"
-  port              = "${element(compact(split(",",local.lb_http_ports)), count.index)}"
+  load_balancer_arn = element(concat(aws_lb.application.*.arn, aws_lb.network.*.arn, list("")), 0)
+  port              = element(compact(split(",", local.lb_http_ports)), count.index)
   protocol          = "HTTP"
 
   default_action {
-    target_group_arn = "${element(concat(aws_lb_target_group.application-http.*.arn), count.index)}"
+    target_group_arn = element(concat(aws_lb_target_group.application-http.*.arn), count.index)
     type             = "forward"
   }
 }
 
 resource "aws_lb_listener" "https" {
-  count = "${
-    module.enabled.value &&
+  count = (var.enabled &&
     var.type == "application" &&
-    contains(var.lb_protocols, "HTTPS")
-    ? length(compact(split(",", local.lb_https_ports))) : 0}"
+  contains(var.lb_protocols, "HTTPS")) ? length(compact(split(",", local.lb_https_ports))) : 0
 
-  load_balancer_arn = "${element(concat(aws_lb.application.*.arn, aws_lb.network.*.arn, list("")), 0)}"
-  port              = "${element(compact(split(",",local.lb_https_ports)), count.index)}"
+  load_balancer_arn = element(concat(aws_lb.application.*.arn, aws_lb.network.*.arn, list("")), 0)
+  port              = element(compact(split(",", local.lb_https_ports)), count.index)
   protocol          = "HTTPS"
-  certificate_arn   = "${element(concat(data.aws_acm_certificate.this.*.arn, list("")), 0)}"
-  ssl_policy        = "${var.security_policy}"
+  certificate_arn   = element(concat(data.aws_acm_certificate.this.*.arn, list("")), 0)
+  ssl_policy        = var.security_policy
 
   default_action {
-    target_group_arn = "${element(concat(aws_lb_target_group.application-https.*.arn), count.index)}"
+    target_group_arn = element(concat(aws_lb_target_group.application-https.*.arn), count.index)
     type             = "forward"
   }
 }
@@ -421,28 +389,24 @@ resource "aws_lb_listener" "https" {
 # TODO: figure out way to add to all ports
 #   temp: could add another stansa for second port if >= 2 https ports
 resource "aws_lb_listener_certificate" "https" {
-  count = "${
-    module.enabled.value &&
+  count = (var.enabled &&
     var.type == "application" &&
-    contains(var.lb_protocols, "HTTPS")
-    ? length(var.certificate_additional_names) : 0 }"
+  contains(var.lb_protocols, "HTTPS")) ? length(var.certificate_additional_names) : 0
 
-  listener_arn    = "${element(aws_lb_listener.https.*.arn, 0)}"
-  certificate_arn = "${element(data.aws_acm_certificate.additional.*.arn, count.index)}"
+  listener_arn    = element(aws_lb_listener.https.*.arn, 0)
+  certificate_arn = element(data.aws_acm_certificate.additional.*.arn, count.index)
 }
 
 resource "aws_lb_listener" "network" {
-  count = "${
-    module.enabled.value &&
-    var.type == "network"
-    ? length(compact(split(",", local.lb_tcp_ports))) : 0}"
+  count = (var.enabled &&
+  var.type == "network") ? length(compact(split(",", local.lb_tcp_ports))) : 0
 
-  load_balancer_arn = "${element(concat(aws_lb.application.*.arn, aws_lb.network.*.arn, list("")), 0)}"
-  port              = "${element(compact(split(",",local.lb_tcp_ports)), count.index)}"
+  load_balancer_arn = element(concat(aws_lb.application.*.arn, aws_lb.network.*.arn, list("")), 0)
+  port              = element(compact(split(",", local.lb_tcp_ports)), count.index)
   protocol          = "TCP"
 
   default_action {
-    target_group_arn = "${element(concat(aws_lb_target_group.network.*.arn), count.index)}"
+    target_group_arn = element(concat(aws_lb_target_group.network.*.arn), count.index)
     type             = "forward"
   }
 }
