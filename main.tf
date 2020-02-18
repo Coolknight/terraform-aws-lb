@@ -96,8 +96,8 @@ resource "aws_lb" "application" {
   enable_deletion_protection = var.enable_deletion_protection
   enable_http2               = var.enable_http2
   idle_timeout               = var.idle_timeout
-  security_groups            = [var.security_groups]
-  subnets                    = [var.subnets]
+  security_groups            = var.security_groups
+  subnets                    = var.subnets
   tags                       = module.label.tags
 
   #ip_address_type     = "${}"
@@ -129,7 +129,7 @@ resource "aws_lb" "network" {
   enable_cross_zone_load_balancing = var.enable_cross_zone_load_balancing
   enable_deletion_protection       = var.enable_deletion_protection
   idle_timeout                     = var.idle_timeout
-  subnets                          = [var.subnets]
+  subnets                          = var.subnets
   tags                             = module.label.tags
 
   #ip_address_type     = "${}"
@@ -182,7 +182,7 @@ resource "aws_s3_bucket" "log_bucket" {
   bucket = module.log_bucket.id
 
   #acl
-  policy        = var.bucket_policy == "" ? data.aws_iam_policy_document.bucket_policy.json : var.bucket_policy
+  policy        = var.bucket_policy == "" ? data.aws_iam_policy_document.bucket_policy[0].json : var.bucket_policy
   force_destroy = var.force_destroy_log_bucket
   tags          = merge(var.tags, map("Name", format("%s", var.log_bucket_name)))
 
@@ -339,13 +339,24 @@ resource "aws_lb_target_group" "network" {
     list(substr(module.label.id_org, 0, 26 <= length(module.label.id_org) ? 26 : length(module.label.id_org))),
   list(element(compact(split(",", local.instance_tcp_ports)), count.index)))
 
-  health_check = list(local.healthcheck)
-  port         = element(compact(split(",", local.instance_tcp_ports)), count.index)
-  protocol     = "TCP"
-  stickiness   = []
-  tags         = module.label.tags
-  target_type  = var.target_type
-  vpc_id       = var.vpc_id
+  dynamic "health_check" {
+    for_each = [local.healthcheck]
+    content {
+      interval            = lookup(health_check.value, "interval", null)
+      port                = lookup(health_check.value, "port", null)
+      healthy_threshold   = lookup(health_check.value, "healthy_threshold", null)
+      unhealthy_threshold = lookup(health_check.value, "unhealthy_threshold", null)
+      protocol            = lookup(health_check.value, "protocol", null)
+      path                = lookup(health_check.value, "path", null)
+      matcher             = lookup(health_check.value, "matcher", null)
+      timeout             = lookup(health_check.value, "timeout", null)
+    }
+  }
+  port        = element(compact(split(",", local.instance_tcp_ports)), count.index)
+  protocol    = "TCP"
+  tags        = module.label.tags
+  target_type = var.target_type
+  vpc_id      = var.vpc_id
 
   #deregistration_delay  = "${}"
   lifecycle {
@@ -426,4 +437,3 @@ resource "aws_lb_listener_rule" "this" {
   }
 }
 */
-
